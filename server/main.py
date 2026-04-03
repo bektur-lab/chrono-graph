@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers.graph import router as graph_router
 
 app = FastAPI(title="ChronoGraph API")
 
@@ -11,26 +12,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(graph_router)
+
 
 @app.get("/")
 def root():
     return {"message": "ChronoGraph API is running"}
-
-
-@app.get("/graph")
-def get_graph():
-    # Placeholder graph data
-    return {
-        "nodes": [
-            {"id": "1", "label": "Isaac Newton", "type": "scientist"},
-            {"id": "2", "label": "Gravity", "type": "discovery"},
-            {"id": "3", "label": "Albert Einstein", "type": "scientist"},
-            {"id": "4", "label": "General Relativity", "type": "discovery"},
-        ],
-        "edges": [
-            {"source": "1", "target": "2", "type": "discovered"},
-            {"source": "1", "target": "3", "type": "influenced"},
-            {"source": "3", "target": "4", "type": "discovered"},
-            {"source": "2", "target": "4", "type": "led_to"},
-        ],
-    }

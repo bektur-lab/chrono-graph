@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { useNavigate } from "react-router-dom";
-import { mockData, NODE_COLORS, EDGE_COLORS } from "../data/mockData";
-import type { NodeData, EdgeData } from "../data/mockData";
+import { NODE_COLORS, EDGE_COLORS } from "../data/mockData";
+import type { GraphData, NodeData, EdgeData } from "../data/mockData";
 
 interface SimNode extends NodeData {
   x: number;
@@ -17,7 +17,11 @@ interface SimLink {
   type: EdgeData["type"];
 }
 
-export default function GraphView() {
+interface Props {
+  data: GraphData;
+}
+
+export default function GraphView({ data }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const navigate = useNavigate();
 
@@ -28,7 +32,6 @@ export default function GraphView() {
     const width = svgRef.current!.clientWidth || 900;
     const height = svgRef.current!.clientHeight || 600;
 
-    // Zoom container
     const container = svg.append("g");
 
     svg.call(
@@ -37,8 +40,7 @@ export default function GraphView() {
         .on("zoom", (event) => container.attr("transform", event.transform))
     );
 
-    // Nodes and links
-    const nodes: SimNode[] = mockData.nodes.map((n) => ({
+    const nodes: SimNode[] = data.nodes.map((n) => ({
       ...n.data,
       x: width / 2 + (Math.random() - 0.5) * 200,
       y: height / 2 + (Math.random() - 0.5) * 200,
@@ -48,7 +50,7 @@ export default function GraphView() {
 
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
-    const links: SimLink[] = mockData.edges
+    const links: SimLink[] = data.edges
       .map((e) => {
         const source = nodeById.get(e.data.source);
         const target = nodeById.get(e.data.target);
@@ -74,7 +76,6 @@ export default function GraphView() {
         .attr("fill", EDGE_COLORS[t]);
     });
 
-    // Links
     const link = container.append("g")
       .selectAll<SVGPathElement, SimLink>("path")
       .data(links)
@@ -85,7 +86,6 @@ export default function GraphView() {
       .attr("stroke-opacity", 0.7)
       .attr("marker-end", (d) => `url(#arrow-${d.type})`);
 
-    // Node groups
     const node = container.append("g")
       .selectAll<SVGGElement, SimNode>("g")
       .data(nodes)
@@ -109,7 +109,6 @@ export default function GraphView() {
       .attr("fill", "#e5e7eb")
       .attr("pointer-events", "none");
 
-    // Tooltip
     const tooltip = d3.select("body")
       .append("div")
       .style("position", "fixed")
@@ -139,7 +138,6 @@ export default function GraphView() {
 
     const NODE_RADIUS = 14;
 
-    // Force simulation
     const simulation = d3.forceSimulation<SimNode>(nodes)
       .force("link", d3.forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(140))
       .force("charge", d3.forceManyBody().strength(-500))
@@ -156,7 +154,6 @@ export default function GraphView() {
           const dx = d.target.x - d.source.x;
           const dy = d.target.y - d.source.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          // Perpendicular offset for the control point — creates a gentle arc
           const bend = dist * 0.15;
           const mx = (d.source.x + d.target.x) / 2 - (dy / dist) * bend;
           const my = (d.source.y + d.target.y) / 2 + (dx / dist) * bend;
@@ -166,7 +163,6 @@ export default function GraphView() {
         node.attr("transform", (d) => `translate(${d.x},${d.y})`);
       });
 
-    // Drag
     const drag = d3.drag<SVGGElement, SimNode>()
       .on("start", (event, d) => {
         if (!event.active) simulation.alphaTarget(0.05).restart();
@@ -190,7 +186,7 @@ export default function GraphView() {
       simulation.stop();
       tooltip.remove();
     };
-  }, [navigate]);
+  }, [data, navigate]);
 
   return (
     <svg

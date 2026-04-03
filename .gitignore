@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Node
+client/node_modules/
+client/dist/
+
+# Python
+server/venv/
+server/__pycache__/
+*.pyc
+*.pyo
+
+# Env
+.env
+.env.local

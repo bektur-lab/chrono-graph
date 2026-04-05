@@ -29,6 +29,7 @@ export function useGraphData(refresh = false): FetchState {
       })
       .then((data) => {
         if (!cancelled) setState({ status: "ok", data, source: "live" });
+        console.log(data)
       })
       .catch(() => {
         if (!cancelled) {

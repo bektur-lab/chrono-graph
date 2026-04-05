@@ -21,6 +21,12 @@ interface Props {
   data: GraphData;
 }
 
+const LANE_Y: Record<string, number> = {
+  scientist: 0.2,
+  discovery: 0.5,
+  invention: 0.8,
+};
+
 export default function GraphView({ data }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const navigate = useNavigate();
@@ -34,19 +40,17 @@ export default function GraphView({ data }: Props) {
 
     const container = svg.append("g");
 
-    svg.call(
-      d3.zoom<SVGSVGElement, unknown>()
-        .scaleExtent([0.3, 3])
-        .on("zoom", (event) => container.attr("transform", event.transform))
-    );
+    const allYears = data.nodes.map((n) => n.data.year).filter(Boolean) as number[];
+    const minYear = Math.min(...allYears);
+    const maxYear = Math.max(...allYears);
+    const pad = 80;
+    const xScale = d3.scaleLinear([minYear, maxYear], [pad, width - pad]);
 
-    const nodes: SimNode[] = data.nodes.map((n) => ({
-      ...n.data,
-      x: width / 2 + (Math.random() - 0.5) * 200,
-      y: height / 2 + (Math.random() - 0.5) * 200,
-      vx: 0,
-      vy: 0,
-    }));
+    const nodes: SimNode[] = data.nodes.map((n) => {
+      const tx = n.data.year ? xScale(n.data.year) : width / 2;
+      const ty = height * (LANE_Y[n.data.variety] ?? 0.5);
+      return { ...n.data, x: tx, y: ty, vx: 0, vy: 0 };
+    });
 
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
@@ -59,6 +63,31 @@ export default function GraphView({ data }: Props) {
       })
       .filter(Boolean) as SimLink[];
 
+    // Lane labels
+    const lanes = [
+      { label: "Scientists", fy: LANE_Y.scientist },
+      { label: "Discoveries", fy: LANE_Y.discovery },
+      { label: "Inventions", fy: LANE_Y.invention },
+    ];
+    lanes.forEach(({ label, fy }) => {
+      container.append("text")
+        .attr("x", 8)
+        .attr("y", height * fy)
+        .attr("dy", "0.35em")
+        .attr("font-size", "10px")
+        .attr("fill", "#4b5563")
+        .attr("font-weight", 600)
+        .attr("letter-spacing", "0.05em")
+        .text(label.toUpperCase());
+
+      container.append("line")
+        .attr("x1", 0).attr("x2", width)
+        .attr("y1", height * fy).attr("y2", height * fy)
+        .attr("stroke", "#1f2937")
+        .attr("stroke-width", 1)
+        .attr("stroke-dasharray", "4 4");
+    });
+
     // Arrow markers
     const edgeTypes = ["discovered", "invented", "influenced", "led_to"] as const;
     const defs = svg.append("defs");
@@ -66,7 +95,7 @@ export default function GraphView({ data }: Props) {
       defs.append("marker")
         .attr("id", `arrow-${t}`)
         .attr("viewBox", "0 -5 10 10")
-        .attr("refX", 20)
+        .attr("refX", 13)
         .attr("refY", 0)
         .attr("markerWidth", 6)
         .attr("markerHeight", 6)
@@ -83,7 +112,7 @@ export default function GraphView({ data }: Props) {
       .attr("fill", "none")
       .attr("stroke", (d) => EDGE_COLORS[d.type])
       .attr("stroke-width", 1.5)
-      .attr("stroke-opacity", 0.7)
+      .attr("stroke-opacity", 0.6)
       .attr("marker-end", (d) => `url(#arrow-${d.type})`);
 
     const node = container.append("g")
@@ -96,16 +125,16 @@ export default function GraphView({ data }: Props) {
       });
 
     node.append("circle")
-      .attr("r", 14)
+      .attr("r", 8)
       .attr("fill", (d) => NODE_COLORS[d.variety])
-      .attr("stroke", "#1f2937")
+      .attr("stroke", "#0f172a")
       .attr("stroke-width", 2);
 
     node.append("text")
       .text((d) => d.label)
-      .attr("x", 18)
-      .attr("y", 4)
-      .attr("font-size", "11px")
+      .attr("x", 12)
+      .attr("y", -10)
+      .attr("font-size", "10px")
       .attr("fill", "#e5e7eb")
       .attr("pointer-events", "none");
 
@@ -136,49 +165,39 @@ export default function GraphView({ data }: Props) {
         tooltip.style("opacity", 0);
       });
 
-    const NODE_RADIUS = 14;
+    const NODE_RADIUS = 8;
 
     const simulation = d3.forceSimulation<SimNode>(nodes)
-      .force("link", d3.forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(140))
-      .force("charge", d3.forceManyBody().strength(-500))
-      .force("collide", d3.forceCollide<SimNode>(NODE_RADIUS + 30).strength(1).iterations(3))
-      .force("x", d3.forceX(width / 2).strength(0.05))
-      .force("y", d3.forceY(height / 2).strength(0.05))
+      .force("link", d3.forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(80).strength(0.1))
+      .force("charge", d3.forceManyBody().strength(-60))
+      .force("collide", d3.forceCollide<SimNode>(NODE_RADIUS + 20).strength(1).iterations(3))
+      // Pull nodes to their year on X axis
+      .force("x", d3.forceX<SimNode>((d) => d.year ? xScale(d.year) : width / 2).strength(0.8))
+      // Pull nodes to their lane on Y axis
+      .force("y", d3.forceY<SimNode>((d) => height * (LANE_Y[d.variety] ?? 0.5)).strength(0.9))
       .on("tick", () => {
         nodes.forEach((d) => {
-          d.x = Math.max(20, Math.min(width - 20, d.x));
+          d.x = Math.max(pad / 2, Math.min(width - pad / 2, d.x));
           d.y = Math.max(20, Math.min(height - 20, d.y));
         });
 
         link.attr("d", (d) => {
-          const dx = d.target.x - d.source.x;
-          const dy = d.target.y - d.source.y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const bend = dist * 0.15;
-          const mx = (d.source.x + d.target.x) / 2 - (dy / dist) * bend;
-          const my = (d.source.y + d.target.y) / 2 + (dx / dist) * bend;
-          return `M${d.source.x},${d.source.y} Q${mx},${my} ${d.target.x},${d.target.y}`;
+          const sx = d.source.x, sy = d.source.y;
+          const tx = d.target.x, ty = d.target.y;
+          // Horizontal bezier — control points align with source/target Y for git-like curves
+          const cx1 = sx + (tx - sx) * 0.5;
+          const cx2 = tx - (tx - sx) * 0.5;
+          return `M${sx},${sy} C${cx1},${sy} ${cx2},${ty} ${tx},${ty}`;
         });
 
         node.attr("transform", (d) => `translate(${d.x},${d.y})`);
       });
 
+    // Drag: no simulation restart — just move the node, no scatter
     const drag = d3.drag<SVGGElement, SimNode>()
-      .on("start", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0.05).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-      })
-      .on("drag", (event, d) => {
-        d.fx = event.x;
-        d.fy = event.y;
-        simulation.alphaTarget(0.05).restart();
-      })
-      .on("end", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-      });
+      .on("start", (_event, d) => { d.fx = d.x; d.fy = d.y; })
+      .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+      .on("end", (_e, d) => { d.fx = null; d.fy = null; });
 
     node.call(drag);
 
